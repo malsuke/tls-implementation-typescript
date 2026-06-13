@@ -1,93 +1,100 @@
-import { CipherSuite, HandshakeType, TLSVersion } from '../../../protocol/constants'
-import { Reader } from '../../../utils/reader'
-import { Writer } from '../../../utils/writer'
-import { Extension } from './extensions/extension'
-import type { HandshakeMessage } from './handshake'
+import { CipherSuite, TLSVersion } from '../../../protocol/constants'
+import {
+  createReader,
+  isEmpty,
+  readBytes,
+  readUint8LengthPrefixed,
+  readUint16,
+  readUint16LengthPrefixed,
+} from '../../../utils/reader'
+import {
+  createWriter,
+  getBytes,
+  writeBytes,
+  writeUint8LengthPrefixed,
+  writeUint16,
+  writeUint16LengthPrefixed,
+} from '../../../utils/writer'
+import { type Extension, marshalExtension, parseExtensions } from './extensions/extension'
 
 const CLIENT_RANDOM_LENGTH = 32
 
-export class ClientHello implements HandshakeMessage {
-  constructor(
-    public protocolVersion: TLSVersion,
-    public random: Uint8Array, // 32 bytes
-    public legacySessionId: Uint8Array,
-    public cipherSuites: CipherSuite[],
-    public legacyCompressionMethods: Uint8Array,
-    public extensions: Extension[]
-  ) {}
+export interface ClientHello {
+  protocolVersion: TLSVersion
+  random: Uint8Array // 32 bytes
+  legacySessionId: Uint8Array
+  cipherSuites: CipherSuite[]
+  legacyCompressionMethods: Uint8Array
+  extensions: Extension[]
+}
 
-  public type(): HandshakeType {
-    return HandshakeType.ClientHello
+export const createClientHello = (random: Uint8Array, exts: Extension[]): ClientHello => {
+  if (random.length !== CLIENT_RANDOM_LENGTH) {
+    throw new Error(`Random must be ${CLIENT_RANDOM_LENGTH} bytes`)
   }
+  return {
+    protocolVersion: TLSVersion.TLS_1_2,
+    random,
+    legacySessionId: new Uint8Array(0),
+    cipherSuites: [CipherSuite.TLS_AES_128_GCM_SHA256],
+    legacyCompressionMethods: new Uint8Array([0x00]),
+    extensions: exts,
+  }
+}
 
-  public static create(random: Uint8Array, exts: Extension[]): ClientHello {
-    if (random.length !== CLIENT_RANDOM_LENGTH) {
-      throw new Error(`Random must be ${CLIENT_RANDOM_LENGTH} bytes`)
+export const marshalClientHello = (ch: ClientHello): Uint8Array => {
+  const writer = createWriter()
+  writeUint16(writer, ch.protocolVersion)
+  writeBytes(writer, ch.random)
+
+  writeUint8LengthPrefixed(writer, w => writeBytes(w, ch.legacySessionId))
+
+  writeUint16LengthPrefixed(writer, w => {
+    for (const cs of ch.cipherSuites) {
+      writeUint16(w, cs)
     }
-    return new ClientHello(
-      TLSVersion.TLS_1_2,
-      random,
-      new Uint8Array(0),
-      [CipherSuite.TLS_AES_128_GCM_SHA256],
-      new Uint8Array([0x00]),
-      exts
-    )
-  }
+  })
 
-  public marshal(): Uint8Array {
-    const writer = new Writer()
-    writer.writeUint16(this.protocolVersion)
-    writer.writeBytes(this.random)
+  writeUint8LengthPrefixed(writer, w => writeBytes(w, ch.legacyCompressionMethods))
 
-    writer.writeUint8LengthPrefixed(w => w.writeBytes(this.legacySessionId))
-
-    writer.writeUint16LengthPrefixed(w => {
-      for (const cs of this.cipherSuites) {
-        w.writeUint16(cs)
+  if (ch.extensions.length > 0) {
+    writeUint16LengthPrefixed(writer, w => {
+      for (const ext of ch.extensions) {
+        writeBytes(w, marshalExtension(ext))
       }
     })
-
-    writer.writeUint8LengthPrefixed(w => w.writeBytes(this.legacyCompressionMethods))
-
-    if (this.extensions.length > 0) {
-      writer.writeUint16LengthPrefixed(w => {
-        for (const ext of this.extensions) {
-          w.writeBytes(ext.marshal())
-        }
-      })
-    }
-
-    return writer.bytes()
   }
 
-  public static unmarshal(data: Uint8Array): ClientHello {
-    const reader = new Reader(data)
-    const protocolVersion = reader.readUint16() as TLSVersion
-    const random = reader.readBytes(CLIENT_RANDOM_LENGTH)
-    const legacySessionId = reader.readUint8LengthPrefixed()
+  return getBytes(writer)
+}
 
-    const cipherSuitesData = reader.readUint16LengthPrefixed()
-    const csReader = new Reader(cipherSuitesData)
-    const cipherSuites: CipherSuite[] = []
-    while (!csReader.isEmpty) {
-      cipherSuites.push(csReader.readUint16() as CipherSuite)
-    }
+export const unmarshalClientHello = (data: Uint8Array): ClientHello => {
+  const reader = createReader(data)
+  const protocolVersion = readUint16(reader) as TLSVersion
+  const random = readBytes(reader, CLIENT_RANDOM_LENGTH)
+  const legacySessionId = readUint8LengthPrefixed(reader)
 
-    const legacyCompressionMethods = reader.readUint8LengthPrefixed()
+  const cipherSuitesData = readUint16LengthPrefixed(reader)
+  const csReader = createReader(cipherSuitesData)
+  const cipherSuites: CipherSuite[] = []
+  while (!isEmpty(csReader)) {
+    cipherSuites.push(readUint16(csReader) as CipherSuite)
+  }
 
-    let extensions: Extension[] = []
-    if (!reader.isEmpty) {
-      const extensionsData = reader.readUint16LengthPrefixed()
-      extensions = Extension.unmarshalExtensions(extensionsData)
-    }
+  const legacyCompressionMethods = readUint8LengthPrefixed(reader)
 
-    return new ClientHello(
-      protocolVersion,
-      random,
-      legacySessionId,
-      cipherSuites,
-      legacyCompressionMethods,
-      extensions
-    )
+  let extensions: Extension[] = []
+  if (!isEmpty(reader)) {
+    const extensionsData = readUint16LengthPrefixed(reader)
+    extensions = parseExtensions(extensionsData)
+  }
+
+  return {
+    protocolVersion,
+    random,
+    legacySessionId,
+    cipherSuites,
+    legacyCompressionMethods,
+    extensions,
   }
 }

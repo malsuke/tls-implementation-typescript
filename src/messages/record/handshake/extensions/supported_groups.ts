@@ -1,43 +1,50 @@
 import { CurveID, ExtensionType } from '../../../../protocol/constants'
-import { Reader } from '../../../../utils/reader'
-import { Writer } from '../../../../utils/writer'
-import { Extension, type ExtensionData } from './extension'
+import {
+  createReader,
+  isEmpty,
+  readUint16,
+  readUint16LengthPrefixed,
+} from '../../../../utils/reader'
+import {
+  createWriter,
+  getBytes,
+  writeUint16,
+  writeUint16LengthPrefixed,
+} from '../../../../utils/writer'
+import { createExtension, type Extension } from './extension'
 
-export class SupportedGroups implements ExtensionData {
-  constructor(public groups: CurveID[]) {}
+export interface SupportedGroups {
+  groups: CurveID[]
+}
 
-  public type(): ExtensionType {
-    return ExtensionType.SupportedGroups
-  }
-
-  public marshalPayload(): Uint8Array {
-    const writer = new Writer()
-    writer.writeUint16LengthPrefixed(w => {
-      for (const g of this.groups) {
-        w.writeUint16(g)
-      }
-    })
-    return writer.bytes()
-  }
-
-  public static unmarshal(payload: Uint8Array): SupportedGroups {
-    const reader = new Reader(payload)
-    const curveList = reader.readUint16LengthPrefixed()
-
-    if (curveList.length === 0 || curveList.length % 2 !== 0) {
-      throw new Error('failed to parse supported groups')
+export const marshalSupportedGroupsPayload = (sg: SupportedGroups): Uint8Array => {
+  const writer = createWriter()
+  writeUint16LengthPrefixed(writer, w => {
+    for (const g of sg.groups) {
+      writeUint16(w, g)
     }
+  })
+  return getBytes(writer)
+}
 
-    const listReader = new Reader(curveList)
-    const groups: CurveID[] = []
-    while (!listReader.isEmpty) {
-      groups.push(listReader.readUint16() as CurveID)
-    }
+export const unmarshalSupportedGroups = (payload: Uint8Array): SupportedGroups => {
+  const reader = createReader(payload)
+  const curveList = readUint16LengthPrefixed(reader)
 
-    return new SupportedGroups(groups)
+  if (curveList.length === 0 || curveList.length % 2 !== 0) {
+    throw new Error('failed to parse supported groups')
   }
 
-  public static createExtension(): Extension {
-    return Extension.create(new SupportedGroups([CurveID.X25519]))
+  const listReader = createReader(curveList)
+  const groups: CurveID[] = []
+  while (!isEmpty(listReader)) {
+    groups.push(readUint16(listReader) as CurveID)
   }
+
+  return { groups }
+}
+
+export const createSupportedGroupsExtension = (groups: CurveID[] = [CurveID.X25519]): Extension => {
+  const sg: SupportedGroups = { groups }
+  return createExtension(ExtensionType.SupportedGroups, marshalSupportedGroupsPayload(sg))
 }

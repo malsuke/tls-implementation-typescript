@@ -1,13 +1,13 @@
 import {
   ContentType,
   HandshakeType,
-  TLSPlaintext,
-  Handshake,
-  ClientHello,
+  parseTLSPlaintext,
+  parseHandshake,
+  unmarshalClientHello,
 } from "../src/index";
 
 // Helper function to convert a hex string to a Uint8Array
-function hexToUint8Array(hex: string): Uint8Array {
+const hexToUint8Array = (hex: string): Uint8Array => {
   const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < hex.length; i += 2) {
     bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
@@ -25,7 +25,7 @@ console.log(`Raw data length: ${rawData.length} bytes\n`);
 
 try {
   // 1. Parse the TLS Record
-  const record = TLSPlaintext.parse(rawData);
+  const record = parseTLSPlaintext(rawData);
   console.log("1. Record Layer parsed:");
   console.log(
     `   Type: ${ContentType[record.type]} (0x${record.type.toString(16).padStart(2, "0")})`,
@@ -35,7 +35,7 @@ try {
 
   if (record.type === ContentType.Handshake) {
     // 2. Parse the Handshake message from the Record payload
-    const handshake = Handshake.parse(record.payload);
+    const handshake = parseHandshake(record.payload);
     console.log("2. Handshake Layer parsed:");
     console.log(
       `   Type: ${HandshakeType[handshake.handshakeType]} (0x${handshake.handshakeType.toString(16).padStart(2, "0")})`,
@@ -44,7 +44,7 @@ try {
 
     if (handshake.handshakeType === HandshakeType.ClientHello) {
       // 3. Parse the specific ClientHello message
-      const clientHello = ClientHello.unmarshal(handshake.body);
+      const clientHello = unmarshalClientHello(handshake.body);
       console.log("3. ClientHello Message parsed:");
       console.log(
         `   Protocol Version: 0x${clientHello.protocolVersion.toString(16).padStart(4, "0")}`,

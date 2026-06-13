@@ -1,46 +1,44 @@
 import type { HandshakeType } from '../../../protocol/constants'
-import { Reader } from '../../../utils/reader'
-import { Writer } from '../../../utils/writer'
+import {
+  createReader,
+  getUnreadBytes,
+  readBytes,
+  readUint8,
+  readUint24,
+} from '../../../utils/reader'
+import { createWriter, getBytes, writeBytes, writeUint8, writeUint24 } from '../../../utils/writer'
 
 export const MAX_HANDSHAKE_BODY_LEN = 0xffffff
 
-export interface HandshakeMessage {
-  type(): HandshakeType
-  marshal(): Uint8Array
+export interface Handshake {
+  handshakeType: HandshakeType
+  length: number
+  body: Uint8Array
 }
 
-export class Handshake {
-  constructor(
-    public handshakeType: HandshakeType,
-    public length: number,
-    public body: Uint8Array
-  ) {}
-
-  public static create(msg: HandshakeMessage): Handshake {
-    const body = msg.marshal()
-    const len = body.length
-    if (len > MAX_HANDSHAKE_BODY_LEN) {
-      throw new Error('tls: handshake body too large')
-    }
-    return new Handshake(msg.type(), len, body)
+export const createHandshake = (handshakeType: HandshakeType, body: Uint8Array): Handshake => {
+  const len = body.length
+  if (len > MAX_HANDSHAKE_BODY_LEN) {
+    throw new Error('tls: handshake body too large')
   }
+  return { handshakeType, length: len, body }
+}
 
-  public marshal(): Uint8Array {
-    const writer = new Writer()
-    writer.writeUint8(this.handshakeType)
-    writer.writeUint24(this.length)
-    writer.writeBytes(this.body)
-    return writer.bytes()
-  }
+export const marshalHandshake = (handshake: Handshake): Uint8Array => {
+  const writer = createWriter()
+  writeUint8(writer, handshake.handshakeType)
+  writeUint24(writer, handshake.length)
+  writeBytes(writer, handshake.body)
+  return getBytes(writer)
+}
 
-  public static parse(data: Uint8Array): Handshake {
-    const reader = new Reader(data)
-    const handshakeType = reader.readUint8() as HandshakeType
-    const length = reader.readUint24()
-    if (reader.unreadBytes < length) {
-      throw new Error('tls: handshake body length mismatch')
-    }
-    const body = reader.readBytes(length)
-    return new Handshake(handshakeType, length, body)
+export const parseHandshake = (data: Uint8Array): Handshake => {
+  const reader = createReader(data)
+  const handshakeType = readUint8(reader) as HandshakeType
+  const length = readUint24(reader)
+  if (getUnreadBytes(reader) < length) {
+    throw new Error('tls: handshake body length mismatch')
   }
+  const body = readBytes(reader, length)
+  return { handshakeType, length, body }
 }

@@ -1,68 +1,81 @@
-export class Writer {
-  private chunks: Uint8Array[] = []
+export interface Writer {
+  chunks: Uint8Array[]
+}
 
-  public writeUint8(value: number): void {
-    this.chunks.push(new Uint8Array([value & 0xff]))
-  }
+export const createWriter = (): Writer => ({
+  chunks: [],
+})
 
-  public writeUint16(value: number): void {
-    this.chunks.push(new Uint8Array([(value >> 8) & 0xff, value & 0xff]))
-  }
+export const writeUint8 = (writer: Writer, value: number): void => {
+  writer.chunks.push(new Uint8Array([value & 0xff]))
+}
 
-  public writeUint24(value: number): void {
-    this.chunks.push(new Uint8Array([(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff]))
-  }
+export const writeUint16 = (writer: Writer, value: number): void => {
+  writer.chunks.push(new Uint8Array([(value >> 8) & 0xff, value & 0xff]))
+}
 
-  public writeUint32(value: number): void {
-    this.chunks.push(
-      new Uint8Array([
-        (value >>> 24) & 0xff,
-        (value >>> 16) & 0xff,
-        (value >>> 8) & 0xff,
-        value & 0xff,
-      ])
-    )
-  }
+export const writeUint24 = (writer: Writer, value: number): void => {
+  writer.chunks.push(new Uint8Array([(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff]))
+}
 
-  public writeBytes(bytes: Uint8Array): void {
-    this.chunks.push(bytes)
-  }
+export const writeUint32 = (writer: Writer, value: number): void => {
+  writer.chunks.push(
+    new Uint8Array([
+      (value >>> 24) & 0xff,
+      (value >>> 16) & 0xff,
+      (value >>> 8) & 0xff,
+      value & 0xff,
+    ])
+  )
+}
 
-  public writeUint8LengthPrefixed(fn: (writer: Writer) => void): void {
-    const innerWriter = new Writer()
-    fn(innerWriter)
-    const innerBytes = innerWriter.bytes()
-    if (innerBytes.length > 0xff) throw new Error('Length exceeds Uint8 capacity')
-    this.writeUint8(innerBytes.length)
-    this.writeBytes(innerBytes)
-  }
+export const writeBytes = (writer: Writer, bytes: Uint8Array): void => {
+  writer.chunks.push(bytes)
+}
 
-  public writeUint16LengthPrefixed(fn: (writer: Writer) => void): void {
-    const innerWriter = new Writer()
-    fn(innerWriter)
-    const innerBytes = innerWriter.bytes()
-    if (innerBytes.length > 0xffff) throw new Error('Length exceeds Uint16 capacity')
-    this.writeUint16(innerBytes.length)
-    this.writeBytes(innerBytes)
+export const getBytes = (writer: Writer): Uint8Array => {
+  const totalLength = writer.chunks.reduce((acc, chunk) => acc + chunk.length, 0)
+  const result = new Uint8Array(totalLength)
+  let offset = 0
+  for (const chunk of writer.chunks) {
+    result.set(chunk, offset)
+    offset += chunk.length
   }
+  return result
+}
 
-  public writeUint24LengthPrefixed(fn: (writer: Writer) => void): void {
-    const innerWriter = new Writer()
-    fn(innerWriter)
-    const innerBytes = innerWriter.bytes()
-    if (innerBytes.length > 0xffffff) throw new Error('Length exceeds Uint24 capacity')
-    this.writeUint24(innerBytes.length)
-    this.writeBytes(innerBytes)
-  }
+export const writeUint8LengthPrefixed = (
+  writer: Writer,
+  fn: (innerWriter: Writer) => void
+): void => {
+  const innerWriter = createWriter()
+  fn(innerWriter)
+  const innerBytes = getBytes(innerWriter)
+  if (innerBytes.length > 0xff) throw new Error('Length exceeds Uint8 capacity')
+  writeUint8(writer, innerBytes.length)
+  writeBytes(writer, innerBytes)
+}
 
-  public bytes(): Uint8Array {
-    const totalLength = this.chunks.reduce((acc, chunk) => acc + chunk.length, 0)
-    const result = new Uint8Array(totalLength)
-    let offset = 0
-    for (const chunk of this.chunks) {
-      result.set(chunk, offset)
-      offset += chunk.length
-    }
-    return result
-  }
+export const writeUint16LengthPrefixed = (
+  writer: Writer,
+  fn: (innerWriter: Writer) => void
+): void => {
+  const innerWriter = createWriter()
+  fn(innerWriter)
+  const innerBytes = getBytes(innerWriter)
+  if (innerBytes.length > 0xffff) throw new Error('Length exceeds Uint16 capacity')
+  writeUint16(writer, innerBytes.length)
+  writeBytes(writer, innerBytes)
+}
+
+export const writeUint24LengthPrefixed = (
+  writer: Writer,
+  fn: (innerWriter: Writer) => void
+): void => {
+  const innerWriter = createWriter()
+  fn(innerWriter)
+  const innerBytes = getBytes(innerWriter)
+  if (innerBytes.length > 0xffffff) throw new Error('Length exceeds Uint24 capacity')
+  writeUint24(writer, innerBytes.length)
+  writeBytes(writer, innerBytes)
 }

@@ -1,52 +1,60 @@
 import { ExtensionType } from '../../../../protocol/constants'
-import { Reader } from '../../../../utils/reader'
-import { Writer } from '../../../../utils/writer'
-import { Extension, type ExtensionData } from './extension'
+import {
+  createReader,
+  isEmpty,
+  readUint8,
+  readUint16LengthPrefixed,
+} from '../../../../utils/reader'
+import {
+  createWriter,
+  getBytes,
+  writeBytes,
+  writeUint8,
+  writeUint16LengthPrefixed,
+} from '../../../../utils/writer'
+import { createExtension, type Extension } from './extension'
 
-export class ServerName implements ExtensionData {
-  constructor(public serverName: string) {}
+export interface ServerName {
+  serverName: string
+}
 
-  public type(): ExtensionType {
-    return ExtensionType.ServerName
-  }
-
-  public marshalPayload(): Uint8Array {
-    const writer = new Writer()
-    writer.writeUint16LengthPrefixed(w1 => {
-      // NameType: host_name (0)
-      w1.writeUint8(0)
-      // HostName
-      w1.writeUint16LengthPrefixed(w2 => {
-        w2.writeBytes(new TextEncoder().encode(this.serverName))
-      })
+export const marshalServerNamePayload = (sn: ServerName): Uint8Array => {
+  const writer = createWriter()
+  writeUint16LengthPrefixed(writer, w1 => {
+    // NameType: host_name (0)
+    writeUint8(w1, 0)
+    // HostName
+    writeUint16LengthPrefixed(w1, w2 => {
+      writeBytes(w2, new TextEncoder().encode(sn.serverName))
     })
-    return writer.bytes()
-  }
+  })
+  return getBytes(writer)
+}
 
-  public static unmarshal(payload: Uint8Array): ServerName {
-    const reader = new Reader(payload)
-    const nameList = reader.readUint16LengthPrefixed()
-    const listReader = new Reader(nameList)
+export const unmarshalServerName = (payload: Uint8Array): ServerName => {
+  const reader = createReader(payload)
+  const nameList = readUint16LengthPrefixed(reader)
+  const listReader = createReader(nameList)
 
-    while (!listReader.isEmpty) {
-      const nameType = listReader.readUint8()
-      const nameBytes = listReader.readUint16LengthPrefixed()
+  while (!isEmpty(listReader)) {
+    const nameType = readUint8(listReader)
+    const nameBytes = readUint16LengthPrefixed(listReader)
 
-      if (nameType !== 0) {
-        continue
-      }
-
-      const serverName = new TextDecoder().decode(nameBytes)
-      if (serverName.endsWith('.')) {
-        throw new Error('failed to parse server name')
-      }
-      return new ServerName(serverName)
+    if (nameType !== 0) {
+      continue
     }
 
-    throw new Error('failed to parse server name')
+    const serverName = new TextDecoder().decode(nameBytes)
+    if (serverName.endsWith('.')) {
+      throw new Error('failed to parse server name')
+    }
+    return { serverName }
   }
 
-  public static createExtension(servername: string): Extension {
-    return Extension.create(new ServerName(servername))
-  }
+  throw new Error('failed to parse server name')
+}
+
+export const createServerNameExtension = (servername: string): Extension => {
+  const sn: ServerName = { serverName: servername }
+  return createExtension(ExtensionType.ServerName, marshalServerNamePayload(sn))
 }

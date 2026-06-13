@@ -1,35 +1,30 @@
 import { HandshakeType } from '../../../protocol/constants'
-import { Reader } from '../../../utils/reader'
-import type { HandshakeMessage } from './handshake'
+import { createReader, readUint8 } from '../../../utils/reader'
 import { stripHandshakeHeader } from './unmarshal_helpers'
 
-export class KeyUpdate implements HandshakeMessage {
-  constructor(public updateRequested: boolean) {}
+export interface KeyUpdate {
+  updateRequested: boolean
+}
 
-  public type(): HandshakeType {
-    return HandshakeType.KeyUpdate
+export const marshalKeyUpdate = (ku: KeyUpdate): Uint8Array => {
+  return new Uint8Array([ku.updateRequested ? 1 : 0])
+}
+
+export const unmarshalKeyUpdate = (data: Uint8Array): KeyUpdate => {
+  const body = stripHandshakeHeader(data, HandshakeType.KeyUpdate)
+
+  if (body.length !== 1) {
+    throw new Error(`invalid KeyUpdate length: ${body.length}`)
   }
 
-  public marshal(): Uint8Array {
-    return new Uint8Array([this.updateRequested ? 1 : 0])
+  const reader = createReader(body)
+  const requestUpdate = readUint8(reader)
+
+  if (requestUpdate === 0) {
+    return { updateRequested: false }
   }
-
-  public static parse(data: Uint8Array): KeyUpdate {
-    const body = stripHandshakeHeader(data, HandshakeType.KeyUpdate)
-
-    if (body.length !== 1) {
-      throw new Error(`invalid KeyUpdate length: ${body.length}`)
-    }
-
-    const reader = new Reader(body)
-    const requestUpdate = reader.readUint8()
-
-    if (requestUpdate === 0) {
-      return new KeyUpdate(false)
-    } else if (requestUpdate === 1) {
-      return new KeyUpdate(true)
-    } else {
-      throw new Error(`invalid KeyUpdate request value: ${requestUpdate}`)
-    }
+  if (requestUpdate === 1) {
+    return { updateRequested: true }
   }
+  throw new Error(`invalid KeyUpdate request value: ${requestUpdate}`)
 }

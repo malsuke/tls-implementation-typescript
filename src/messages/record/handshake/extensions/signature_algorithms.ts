@@ -1,50 +1,57 @@
 import { ExtensionType, SignatureScheme } from '../../../../protocol/constants'
-import { Reader } from '../../../../utils/reader'
-import { Writer } from '../../../../utils/writer'
-import { Extension, type ExtensionData } from './extension'
+import {
+  createReader,
+  isEmpty,
+  readUint16,
+  readUint16LengthPrefixed,
+} from '../../../../utils/reader'
+import {
+  createWriter,
+  getBytes,
+  writeUint16,
+  writeUint16LengthPrefixed,
+} from '../../../../utils/writer'
+import { createExtension, type Extension } from './extension'
 
-export class SignatureAlgorithms implements ExtensionData {
-  constructor(public algorithms: SignatureScheme[]) {}
+export interface SignatureAlgorithms {
+  algorithms: SignatureScheme[]
+}
 
-  public type(): ExtensionType {
-    return ExtensionType.SignatureAlgorithms
-  }
-
-  public marshalPayload(): Uint8Array {
-    const writer = new Writer()
-    writer.writeUint16LengthPrefixed(w => {
-      for (const alg of this.algorithms) {
-        w.writeUint16(alg)
-      }
-    })
-    return writer.bytes()
-  }
-
-  public static unmarshal(payload: Uint8Array): SignatureAlgorithms {
-    const reader = new Reader(payload)
-    const sigList = reader.readUint16LengthPrefixed()
-
-    if (sigList.length === 0 || sigList.length % 2 !== 0) {
-      throw new Error('failed to parse signature algorithms')
+export const marshalSignatureAlgorithmsPayload = (sa: SignatureAlgorithms): Uint8Array => {
+  const writer = createWriter()
+  writeUint16LengthPrefixed(writer, w => {
+    for (const alg of sa.algorithms) {
+      writeUint16(w, alg)
     }
+  })
+  return getBytes(writer)
+}
 
-    const listReader = new Reader(sigList)
-    const algorithms: SignatureScheme[] = []
-    while (!listReader.isEmpty) {
-      algorithms.push(listReader.readUint16() as SignatureScheme)
-    }
+export const unmarshalSignatureAlgorithms = (payload: Uint8Array): SignatureAlgorithms => {
+  const reader = createReader(payload)
+  const sigList = readUint16LengthPrefixed(reader)
 
-    return new SignatureAlgorithms(algorithms)
+  if (sigList.length === 0 || sigList.length % 2 !== 0) {
+    throw new Error('failed to parse signature algorithms')
   }
 
-  public static createExtension(): Extension {
-    return Extension.create(
-      new SignatureAlgorithms([
-        SignatureScheme.ECDSA_SECP256R1_SHA256,
-        SignatureScheme.RSA_PSS_RSAE_SHA256,
-        SignatureScheme.RSA_PKCS1_SHA256,
-        SignatureScheme.ED25519,
-      ])
-    )
+  const listReader = createReader(sigList)
+  const algorithms: SignatureScheme[] = []
+  while (!isEmpty(listReader)) {
+    algorithms.push(readUint16(listReader) as SignatureScheme)
   }
+
+  return { algorithms }
+}
+
+export const createSignatureAlgorithmsExtension = (
+  algorithms: SignatureScheme[] = [
+    SignatureScheme.ECDSA_SECP256R1_SHA256,
+    SignatureScheme.RSA_PSS_RSAE_SHA256,
+    SignatureScheme.RSA_PKCS1_SHA256,
+    SignatureScheme.ED25519,
+  ]
+): Extension => {
+  const sa: SignatureAlgorithms = { algorithms }
+  return createExtension(ExtensionType.SignatureAlgorithms, marshalSignatureAlgorithmsPayload(sa))
 }

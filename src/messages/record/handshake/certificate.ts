@@ -1,33 +1,39 @@
 import { HandshakeType } from '../../../protocol/constants'
-import { Reader } from '../../../utils/reader'
+import {
+  createReader,
+  isEmpty,
+  readUint8LengthPrefixed,
+  readUint16LengthPrefixed,
+  readUint24LengthPrefixed,
+} from '../../../utils/reader'
 import { stripHandshakeHeader } from './unmarshal_helpers'
 
-export class Certificate {
-  constructor(public certificates: Uint8Array[]) {}
+export interface Certificate {
+  certificates: Uint8Array[]
+}
 
-  public static parse(data: Uint8Array): Certificate {
-    const body = stripHandshakeHeader(data, HandshakeType.Certificate)
-    const reader = new Reader(body)
+export const unmarshalCertificate = (data: Uint8Array): Certificate => {
+  const body = stripHandshakeHeader(data, HandshakeType.Certificate)
+  const reader = createReader(body)
 
-    const context = reader.readUint8LengthPrefixed()
-    if (context.length !== 0) {
-      throw new Error('invalid certificate context')
-    }
-
-    const certList = reader.readUint24LengthPrefixed()
-    if (!reader.isEmpty) {
-      throw new Error('failed to read certificate list')
-    }
-
-    const listReader = new Reader(certList)
-    const certificates: Uint8Array[] = []
-
-    while (!listReader.isEmpty) {
-      const cert = listReader.readUint24LengthPrefixed()
-      listReader.readUint16LengthPrefixed()
-      certificates.push(new Uint8Array(cert))
-    }
-
-    return new Certificate(certificates)
+  const context = readUint8LengthPrefixed(reader)
+  if (context.length !== 0) {
+    throw new Error('invalid certificate context')
   }
+
+  const certList = readUint24LengthPrefixed(reader)
+  if (!isEmpty(reader)) {
+    throw new Error('failed to read certificate list')
+  }
+
+  const listReader = createReader(certList)
+  const certificates: Uint8Array[] = []
+
+  while (!isEmpty(listReader)) {
+    const cert = readUint24LengthPrefixed(listReader)
+    readUint16LengthPrefixed(listReader)
+    certificates.push(new Uint8Array(cert))
+  }
+
+  return { certificates }
 }

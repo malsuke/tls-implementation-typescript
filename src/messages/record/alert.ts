@@ -1,37 +1,37 @@
 import { type AlertDescription, AlertLevel } from '../../protocol/constants'
-import { Reader } from '../../utils/reader'
-import { Writer } from '../../utils/writer'
+import { createReader, isEmpty, readUint8 } from '../../utils/reader'
+import { createWriter, getBytes, writeUint8 } from '../../utils/writer'
 
-export class Alert {
-  constructor(
-    public level: AlertLevel,
-    public description: AlertDescription
-  ) {}
-
-  public static parse(data: Uint8Array): Alert {
-    const reader = new Reader(data)
-    const level = reader.readUint8() as AlertLevel
-    const description = reader.readUint8() as AlertDescription
-
-    if (!reader.isEmpty) {
-      throw new Error('Alert has trailing bytes')
-    }
-
-    return new Alert(level, description)
-  }
-
-  public marshal(): Uint8Array {
-    const writer = new Writer()
-    writer.writeUint8(this.level)
-    writer.writeUint8(this.description)
-    return writer.bytes()
-  }
-
-  public static newWarningAlert(desc: AlertDescription): Alert {
-    return new Alert(AlertLevel.Warning, desc)
-  }
-
-  public static newFatalAlert(desc: AlertDescription): Alert {
-    return new Alert(AlertLevel.Fatal, desc)
-  }
+export interface Alert {
+  level: AlertLevel
+  description: AlertDescription
 }
+
+export const parseAlert = (data: Uint8Array): Alert => {
+  const reader = createReader(data)
+  const level = readUint8(reader) as AlertLevel
+  const description = readUint8(reader) as AlertDescription
+
+  if (!isEmpty(reader)) {
+    throw new Error('Alert has trailing bytes')
+  }
+
+  return { level, description }
+}
+
+export const marshalAlert = (alert: Alert): Uint8Array => {
+  const writer = createWriter()
+  writeUint8(writer, alert.level)
+  writeUint8(writer, alert.description)
+  return getBytes(writer)
+}
+
+export const createWarningAlert = (description: AlertDescription): Alert => ({
+  level: AlertLevel.Warning,
+  description,
+})
+
+export const createFatalAlert = (description: AlertDescription): Alert => ({
+  level: AlertLevel.Fatal,
+  description,
+})

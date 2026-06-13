@@ -1,70 +1,82 @@
 import { CurveID, ExtensionType } from '../../../../protocol/constants'
-import { Reader } from '../../../../utils/reader'
-import { Writer } from '../../../../utils/writer'
-import { Extension, type ExtensionData } from './extension'
+import {
+  createReader,
+  isEmpty,
+  readUint16,
+  readUint16LengthPrefixed,
+} from '../../../../utils/reader'
+import {
+  createWriter,
+  getBytes,
+  writeBytes,
+  writeUint16,
+  writeUint16LengthPrefixed,
+} from '../../../../utils/writer'
+import { createExtension, type Extension } from './extension'
 
 export interface KeyShareEntry {
   group: CurveID
   data: Uint8Array
 }
 
-export class KeyShareExtension implements ExtensionData {
-  constructor(public keyShares: KeyShareEntry[]) {}
+export interface KeyShareExtension {
+  keyShares: KeyShareEntry[]
+}
 
-  public type(): ExtensionType {
-    return ExtensionType.KeyShare
-  }
-
-  public marshalPayload(): Uint8Array {
-    const writer = new Writer()
-    writer.writeUint16LengthPrefixed(w1 => {
-      for (const ks of this.keyShares) {
-        w1.writeUint16(ks.group)
-        w1.writeUint16LengthPrefixed(w2 => {
-          w2.writeBytes(ks.data)
-        })
-      }
-    })
-    return writer.bytes()
-  }
-
-  public static unmarshalClient(payload: Uint8Array): KeyShareExtension {
-    const reader = new Reader(payload)
-    const shareList = reader.readUint16LengthPrefixed()
-    const listReader = new Reader(shareList)
-
-    const keyShares: KeyShareEntry[] = []
-    while (!listReader.isEmpty) {
-      const group = listReader.readUint16() as CurveID
-      const data = listReader.readUint16LengthPrefixed()
-      keyShares.push({ group, data })
+export const marshalKeySharePayload = (ksExt: KeyShareExtension): Uint8Array => {
+  const writer = createWriter()
+  writeUint16LengthPrefixed(writer, w1 => {
+    for (const ks of ksExt.keyShares) {
+      writeUint16(w1, ks.group)
+      writeUint16LengthPrefixed(w1, w2 => {
+        writeBytes(w2, ks.data)
+      })
     }
+  })
+  return getBytes(writer)
+}
 
-    return new KeyShareExtension(keyShares)
+export const unmarshalKeyShareClient = (payload: Uint8Array): KeyShareExtension => {
+  const reader = createReader(payload)
+  const shareList = readUint16LengthPrefixed(reader)
+  const listReader = createReader(shareList)
+
+  const keyShares: KeyShareEntry[] = []
+  while (!isEmpty(listReader)) {
+    const group = readUint16(listReader) as CurveID
+    const data = readUint16LengthPrefixed(listReader)
+    keyShares.push({ group, data })
   }
 
-  public static unmarshalServer(payload: Uint8Array): {
-    share?: KeyShareEntry
-    selectedGroup?: CurveID
-  } {
-    const reader = new Reader(payload)
+  return { keyShares }
+}
 
-    if (payload.length === 2) {
-      const selectedGroup = reader.readUint16() as CurveID
-      return { selectedGroup }
-    }
+export const unmarshalKeyShareServer = (
+  payload: Uint8Array
+): {
+  share?: KeyShareEntry
+  selectedGroup?: CurveID
+} => {
+  const reader = createReader(payload)
 
-    const group = reader.readUint16() as CurveID
-    const data = reader.readUint16LengthPrefixed()
-
-    if (!reader.isEmpty) {
-      throw new Error('failed to parse key share server')
-    }
-
-    return { share: { group, data } }
+  if (payload.length === 2) {
+    const selectedGroup = readUint16(reader) as CurveID
+    return { selectedGroup }
   }
 
-  public static createExtension(publicKey: Uint8Array): Extension {
-    return Extension.create(new KeyShareExtension([{ group: CurveID.X25519, data: publicKey }]))
+  const group = readUint16(reader) as CurveID
+  const data = readUint16LengthPrefixed(reader)
+
+  if (!isEmpty(reader)) {
+    throw new Error('failed to parse key share server')
   }
+
+  return { share: { group, data } }
+}
+
+export const createKeyShareExtension = (publicKey: Uint8Array): Extension => {
+  const ksExt: KeyShareExtension = {
+    keyShares: [{ group: CurveID.X25519, data: publicKey }],
+  }
+  return createExtension(ExtensionType.KeyShare, marshalKeySharePayload(ksExt))
 }

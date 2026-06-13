@@ -1,11 +1,11 @@
-export class Invalid {
-  constructor(public payload: Uint8Array) {}
+export interface Invalid {
+  payload: Uint8Array
+}
 
-  public static parse(data: Uint8Array): Invalid {
-    return new Invalid(new Uint8Array(data))
-  }
+export const parseInvalid = (data: Uint8Array): Invalid => ({
+  payload: new Uint8Array(data),
+})
 
-  public marshal(): Uint8Array {
-    return new Uint8Array(this.payload)
-  }
+export const marshalInvalid = (invalid: Invalid): Uint8Array => {
+  return new Uint8Array(invalid.payload)
 }

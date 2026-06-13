@@ -1,51 +1,58 @@
 import { ExtensionType, TLSVersion } from '../../../../protocol/constants'
-import { Reader } from '../../../../utils/reader'
-import { Writer } from '../../../../utils/writer'
-import { Extension, type ExtensionData } from './extension'
+import {
+  createReader,
+  isEmpty,
+  readUint8LengthPrefixed,
+  readUint16,
+} from '../../../../utils/reader'
+import {
+  createWriter,
+  getBytes,
+  writeUint8LengthPrefixed,
+  writeUint16,
+} from '../../../../utils/writer'
+import { createExtension, type Extension } from './extension'
 
-export class SupportedVersions implements ExtensionData {
-  constructor(public versions: TLSVersion[]) {}
+export interface SupportedVersions {
+  versions: TLSVersion[]
+}
 
-  public type(): ExtensionType {
-    return ExtensionType.SupportedVersions
-  }
-
-  public marshalPayload(): Uint8Array {
-    const writer = new Writer()
-    writer.writeUint8LengthPrefixed(w => {
-      for (const v of this.versions) {
-        w.writeUint16(v)
-      }
-    })
-    return writer.bytes()
-  }
-
-  public static unmarshalClient(payload: Uint8Array): SupportedVersions {
-    const reader = new Reader(payload)
-    const versionList = reader.readUint8LengthPrefixed()
-
-    if (versionList.length === 0 || versionList.length % 2 !== 0) {
-      throw new Error('failed to parse supported versions')
+export const marshalSupportedVersionsPayload = (sv: SupportedVersions): Uint8Array => {
+  const writer = createWriter()
+  writeUint8LengthPrefixed(writer, w => {
+    for (const v of sv.versions) {
+      writeUint16(w, v)
     }
+  })
+  return getBytes(writer)
+}
 
-    const listReader = new Reader(versionList)
-    const versions: TLSVersion[] = []
-    while (!listReader.isEmpty) {
-      versions.push(listReader.readUint16() as TLSVersion)
-    }
+export const unmarshalSupportedVersionsClient = (payload: Uint8Array): SupportedVersions => {
+  const reader = createReader(payload)
+  const versionList = readUint8LengthPrefixed(reader)
 
-    return new SupportedVersions(versions)
+  if (versionList.length === 0 || versionList.length % 2 !== 0) {
+    throw new Error('failed to parse supported versions')
   }
 
-  public static unmarshalServer(payload: Uint8Array): TLSVersion {
-    if (payload.length !== 2) {
-      throw new Error('failed to parse supported versions')
-    }
-    const reader = new Reader(payload)
-    return reader.readUint16() as TLSVersion
+  const listReader = createReader(versionList)
+  const versions: TLSVersion[] = []
+  while (!isEmpty(listReader)) {
+    versions.push(readUint16(listReader) as TLSVersion)
   }
 
-  public static createExtension(): Extension {
-    return Extension.create(new SupportedVersions([TLSVersion.TLS_1_3]))
+  return { versions }
+}
+
+export const unmarshalSupportedVersionsServer = (payload: Uint8Array): TLSVersion => {
+  if (payload.length !== 2) {
+    throw new Error('failed to parse supported versions')
   }
+  const reader = createReader(payload)
+  return readUint16(reader) as TLSVersion
+}
+
+export const createSupportedVersionsExtension = (): Extension => {
+  const sv: SupportedVersions = { versions: [TLSVersion.TLS_1_3] }
+  return createExtension(ExtensionType.SupportedVersions, marshalSupportedVersionsPayload(sv))
 }

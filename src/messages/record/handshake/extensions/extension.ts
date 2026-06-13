@@ -1,41 +1,46 @@
 import type { ExtensionType } from '../../../../protocol/constants'
-import { Reader } from '../../../../utils/reader'
-import { Writer } from '../../../../utils/writer'
+import {
+  createReader,
+  isEmpty,
+  readUint16,
+  readUint16LengthPrefixed,
+} from '../../../../utils/reader'
+import {
+  createWriter,
+  getBytes,
+  writeBytes,
+  writeUint16,
+  writeUint16LengthPrefixed,
+} from '../../../../utils/writer'
 
-export interface ExtensionData {
-  type(): ExtensionType
-  marshalPayload(): Uint8Array
+export interface Extension {
+  type: ExtensionType
+  payload: Uint8Array
 }
 
-export class Extension {
-  constructor(
-    public type: ExtensionType,
-    public payload: Uint8Array
-  ) {}
+export const createExtension = (type: ExtensionType, payload: Uint8Array): Extension => ({
+  type,
+  payload,
+})
 
-  public static create(data: ExtensionData): Extension {
-    return new Extension(data.type(), data.marshalPayload())
+export const marshalExtension = (extension: Extension): Uint8Array => {
+  const writer = createWriter()
+  writeUint16(writer, extension.type)
+  writeUint16LengthPrefixed(writer, w => {
+    writeBytes(w, extension.payload)
+  })
+  return getBytes(writer)
+}
+
+export const parseExtensions = (data: Uint8Array): Extension[] => {
+  const exts: Extension[] = []
+  const reader = createReader(data)
+
+  while (!isEmpty(reader)) {
+    const extType = readUint16(reader) as ExtensionType
+    const payload = readUint16LengthPrefixed(reader)
+    exts.push({ type: extType, payload })
   }
 
-  public marshal(): Uint8Array {
-    const writer = new Writer()
-    writer.writeUint16(this.type)
-    writer.writeUint16LengthPrefixed(w => {
-      w.writeBytes(this.payload)
-    })
-    return writer.bytes()
-  }
-
-  public static unmarshalExtensions(data: Uint8Array): Extension[] {
-    const exts: Extension[] = []
-    const reader = new Reader(data)
-
-    while (!reader.isEmpty) {
-      const extType = reader.readUint16() as ExtensionType
-      const payload = reader.readUint16LengthPrefixed()
-      exts.push(new Extension(extType, payload))
-    }
-
-    return exts
-  }
+  return exts
 }

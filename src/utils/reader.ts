@@ -1,70 +1,75 @@
-export class Reader {
-  private offset: number = 0
+export interface Reader {
+  data: Uint8Array
+  offset: number
+}
 
-  constructor(private readonly data: Uint8Array) {}
+export const createReader = (data: Uint8Array): Reader => ({
+  data,
+  offset: 0,
+})
 
-  public get unreadBytes(): number {
-    return this.data.length - this.offset
-  }
+export const getUnreadBytes = (reader: Reader): number => {
+  return reader.data.length - reader.offset
+}
 
-  public get isEmpty(): boolean {
-    return this.unreadBytes === 0
-  }
+export const isEmpty = (reader: Reader): boolean => {
+  return getUnreadBytes(reader) === 0
+}
 
-  public readUint8(): number {
-    if (this.unreadBytes < 1) throw new Error('Data too short to read Uint8')
-    const value = this.data[this.offset] as number
-    this.offset += 1
-    return value
-  }
+export const readUint8 = (reader: Reader): number => {
+  if (getUnreadBytes(reader) < 1) throw new Error('Data too short to read Uint8')
+  const value = reader.data[reader.offset] as number
+  reader.offset += 1
+  return value
+}
 
-  public readUint16(): number {
-    if (this.unreadBytes < 2) throw new Error('Data too short to read Uint16')
-    const value = ((this.data[this.offset] as number) << 8) | (this.data[this.offset + 1] as number)
-    this.offset += 2
-    return value
-  }
+export const readUint16 = (reader: Reader): number => {
+  if (getUnreadBytes(reader) < 2) throw new Error('Data too short to read Uint16')
+  const value =
+    ((reader.data[reader.offset] as number) << 8) | (reader.data[reader.offset + 1] as number)
+  reader.offset += 2
+  return value
+}
 
-  public readUint24(): number {
-    if (this.unreadBytes < 3) throw new Error('Data too short to read Uint24')
-    const value =
-      ((this.data[this.offset] as number) << 16) |
-      ((this.data[this.offset + 1] as number) << 8) |
-      (this.data[this.offset + 2] as number)
-    this.offset += 3
-    return value
-  }
+export const readUint24 = (reader: Reader): number => {
+  if (getUnreadBytes(reader) < 3) throw new Error('Data too short to read Uint24')
+  const value =
+    ((reader.data[reader.offset] as number) << 16) |
+    ((reader.data[reader.offset + 1] as number) << 8) |
+    (reader.data[reader.offset + 2] as number)
+  reader.offset += 3
+  return value
+}
 
-  public readUint32(): number {
-    if (this.unreadBytes < 4) throw new Error('Data too short to read Uint32')
-    const value =
-      ((this.data[this.offset] as number) << 24) |
-      ((this.data[this.offset + 1] as number) << 16) |
-      ((this.data[this.offset + 2] as number) << 8) |
-      (this.data[this.offset + 3] as number)
-    this.offset += 4
-    return value >>> 0
-  }
+export const readUint32 = (reader: Reader): number => {
+  if (getUnreadBytes(reader) < 4) throw new Error('Data too short to read Uint32')
+  const value =
+    ((reader.data[reader.offset] as number) << 24) |
+    ((reader.data[reader.offset + 1] as number) << 16) |
+    ((reader.data[reader.offset + 2] as number) << 8) |
+    (reader.data[reader.offset + 3] as number)
+  reader.offset += 4
+  return value >>> 0
+}
 
-  public readBytes(length: number): Uint8Array {
-    if (this.unreadBytes < length) throw new Error('Data too short to read bytes')
-    const bytes = this.data.slice(this.offset, this.offset + length)
-    this.offset += length
-    return bytes
-  }
+export const readBytes = (reader: Reader, length: number): Uint8Array => {
+  if (getUnreadBytes(reader) < length) throw new Error('Data too short to read bytes')
+  const bytes = reader.data.slice(reader.offset, reader.offset + length)
+  reader.offset += length
+  return bytes
+}
 
-  public readUint8LengthPrefixed(): Uint8Array {
-    const length = this.readUint8()
-    return this.readBytes(length)
-  }
+export const readUint8LengthPrefixed = (reader: Reader): Uint8Array => {
+  const length = readUint8(reader)
+  return readBytes(reader, length)
+}
 
-  public readUint16LengthPrefixed(): Uint8Array {
-    const length = this.readUint16()
-    return this.readBytes(length)
-  }
+export const readUint16LengthPrefixed = (reader: Reader): Uint8Array => {
+  const length = readUint16(reader)
+  return readBytes(reader, length)
+}
 
-  public readUint24LengthPrefixed(): Uint8Array {
-    const length = this.readUint24()
-    return this.readBytes(length)
-  }
+export const readUint24LengthPrefixed = (reader: Reader): Uint8Array => {
+  const length = readUint24(reader)
+  return readBytes(reader, length)
 }

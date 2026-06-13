@@ -1,31 +1,34 @@
-import { ExtensionType } from '../../../../protocol/constants'
-import { Reader } from '../../../../utils/reader'
-import { Writer } from '../../../../utils/writer'
-import type { ExtensionData } from './extension'
+import { createReader, isEmpty, readUint16LengthPrefixed } from '../../../../utils/reader'
+import {
+  createWriter,
+  getBytes,
+  writeBytes,
+  writeUint16LengthPrefixed,
+} from '../../../../utils/writer'
 
-export class Cookie implements ExtensionData {
-  constructor(public cookie: Uint8Array) {}
+export interface Cookie {
+  cookie: Uint8Array
+}
 
-  public type(): ExtensionType {
-    return ExtensionType.Cookie
+export const createCookie = (cookie: Uint8Array): Cookie => ({
+  cookie,
+})
+
+export const marshalCookiePayload = (cookie: Cookie): Uint8Array => {
+  const writer = createWriter()
+  writeUint16LengthPrefixed(writer, w => {
+    writeBytes(w, cookie.cookie)
+  })
+  return getBytes(writer)
+}
+
+export const unmarshalCookie = (payload: Uint8Array): Cookie => {
+  const reader = createReader(payload)
+  const cookie = readUint16LengthPrefixed(reader)
+
+  if (cookie.length === 0 || !isEmpty(reader)) {
+    throw new Error('failed to parse cookie')
   }
 
-  public marshalPayload(): Uint8Array {
-    const writer = new Writer()
-    writer.writeUint16LengthPrefixed(w => {
-      w.writeBytes(this.cookie)
-    })
-    return writer.bytes()
-  }
-
-  public static unmarshal(payload: Uint8Array): Cookie {
-    const reader = new Reader(payload)
-    const cookie = reader.readUint16LengthPrefixed()
-
-    if (cookie.length === 0 || !reader.isEmpty) {
-      throw new Error('failed to parse cookie')
-    }
-
-    return new Cookie(cookie)
-  }
+  return { cookie }
 }
